@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Philia_093 - Character Bible OS</title>
+    <style>
+        :root {
+            --bg-deep: #06040d;
+            --cyrene-hair: linear-gradient(135deg, #ffcde4 0%, #cbe4e9 50%, #c4f0d0 100%);
+            --pink-soft: #ffcad4;
+            --pink-accent: #f3a8c3;
+            --purple-cosmic: #4a355a;
+            --gold-divine: #e4c17b;
+            --paper-base: #fffcfd;
+            --paper-shadow: rgba(74, 53, 90, 0.04);
+            --transition-peel: all 1.1s cubic-bezier(0.645, 0.045, 0.355, 1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'PingFang SC', '-apple-system', sans-serif;
+            background-color: var(--bg-deep);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            color: #e0d8e5;
+            perspective: 2500px;
+            padding: 20px;
+            user-select: none;
+        }
+
+        #particle-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1; pointer-events: none;
+        }
+
+        /* ==========================================
+           🎬 入場打字機動畫容器
+           ========================================== */
+        #intro-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: var(--bg-deep);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 9999; transition: opacity 1.5s ease;
+            cursor: pointer;
+        }
+        #intro-text {
+            font-size: 2.2rem; font-weight: 300; color: #ffb3d1;
+            letter-spacing: 3px; font-family: 'Courier New', Courier, monospace;
+            text-shadow: 0 0 25px rgba(255, 179, 209, 0.6);
+            margin-bottom: 20px;
+            min-height: 50px;
+        }
+        .cursor { animation: blink 0.7s infinite; font-weight: bold; color: #ffb3d1; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        .click-hint {
+            font-size: 0.85rem; color: #615370; letter-spacing: 2px;
+            opacity: 0; transition: opacity 1s ease;
+            font-weight: 300;
+        }
+
+        /* ==========================================
+           主體系統核心
+           ========================================== */
+        #main-system {
+            opacity: 0; transform: translateY(40px) scale(0.95);
+            transition: opacity 2s cubic-bezier(0.25, 1, 0.3, 1), transform 2s cubic-bezier(0.25, 1, 0.3, 1);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            width: 100%;
+        }
+        #main-system.active { opacity: 1; transform: translateY(0) scale(1); }
+
+        header { margin-bottom: 25px; text-align: center; z-index: 10; }
+        header h1 { font-size: 2.2rem; font-weight: 300; color: var(--pink-soft); letter-spacing: 5px; text-shadow: 0 0 20px rgba(255,202,212,0.15); }
+        header p { font-size: 0.85rem; color: #9c8da5; margin-top: 5px; letter-spacing: 1px; }
+
+        .creator-console {
+            display: flex; gap: 15px; margin-bottom: 30px; z-index: 10; background: rgba(20, 14, 31, 0.7);
+            padding: 10px 25px; border-radius: 30px; border: 1px solid rgba(255, 202, 212, 0.12);
+            backdrop-filter: blur(15px); box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .audio-controller {
+            position: fixed; bottom: 25px; right: 25px; z-index: 100;
+            background: rgba(28, 18, 36, 0.6); border: 1px solid rgba(255, 202, 212, 0.2);
+            padding: 8px 15px; border-radius: 15px; font-size: 0.75rem; color: var(--pink-soft);
+            cursor: pointer; backdrop-filter: blur(5px); transition: all 0.3s ease;
+            letter-spacing: 1px; display: flex; align-items: center; gap: 6px;
+        }
+
+        /* ==========================================
+           📖 3D 實體書外殼與「厚度夾層」
+           ========================================== */
+        .stage-3d {
+            position: relative; width: 980px; height: 610px;
+            transform: rotateX(8deg) rotateY(-1deg); transform-style: preserve-3d;
+            transition: transform 0.6s ease;
+        }
+        
+        .book-side-thickness {
+            position: absolute; width: 100%; height: 100%; top: 0; left: 0;
+            pointer-events: none; border-radius: 16px;
+            box-shadow: 
+                0 1px 0 #d9d4dc, 0 2px 0 #c8c2cc, 0 3px 0 #bcba6, 0 4px 0 #b0aab6,
+                0 5px 0 #a49da9, 0 6px 0 #98919d, 0 7px 0 #8c8591, 0 8px 0 #807a85,
+                0 9px 0 #746e7a, 0 10px 0 #68636e, 0 11px 0 #5d5862, 0 12px 0 #514c56,
+                0 35px 70px rgba(0, 0, 0, 0.85);
+            transform: translateZ(-12px);
+        }
+
+        .spine-center {
+            position: absolute; left: 50%; width: 6px; height: 100%;
+            background: linear-gradient(to right, rgba(0,0,0,0.35) 0%, rgba(255,255,255,0.08) 50%, rgba(0,0,0,0.35) 100%);
+            z-index: 999; pointer-events: none; transform: translateZ(3px);
+        }
+
+        .flipbook { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+
+        /* ==========================================
+           🍃 軟性紙張剝離（弯曲）核心
+           ========================================== */
+        .sheet {
+            position: absolute; width: 50%; height: 100%; top: 0; right: 0;
+            transform-origin: left center; transform-style: preserve-3d;
+            transition: var(--transition-peel); z-index: 1;
+        }
+        
+        .sheet.left-side { 
+            transform: rotateY(-180deg) scaleX(0.99);
+        }
+        
+        .sheet.hidden-state { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
+
+        .page-face {
+            position: absolute; width: 100%; height: 100%; top: 0; left: 0;
+            backface-visibility: hidden; background: var(--paper-base);
+            padding: 50px 55px; display: flex; flex-direction: column; overflow: hidden;
+            border-right: 1px solid rgba(0, 0, 0, 0.03);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+        }
+        
+        .page-face.front {
+            z-index: 2; transform: translateZ(0.6px); border-radius: 0 14px 14px 0;
+            background: linear-gradient(to right, #fff4f6 0%, var(--paper-base) 5%, #ffffff 100%);
+            box-shadow: inset 20px 0 35px rgba(0,0,0,0.015), inset -5px 0 12px var(--paper-shadow);
+        }
+        
+        .page-face.back {
+            transform: rotateY(180deg) translateZ(0.6px); border-radius: 14px 0 0 14px;
+            background: linear-gradient(to left, #fff4f6 0%, var(--paper-base) 5%, #ffffff 100%);
+            box-shadow: inset -20px 0 35px rgba(0,0,0,0.015), inset 5px 0 12px var(--paper-shadow);
+        }
+
+        .cover-front {
+            background: var(--cyrene-hair) !important; color: #3d2a45 !important;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 30px; position: relative; box-shadow: inset -12px 0 30px rgba(0,0,0,0.12) !important;
+        }
+        .cover-front::before {
+            content: ''; position: absolute; top: 20px; bottom: 20px; left: 20px; right: 20px;
+            border: 2px solid var(--purple-cosmic); border-radius: 8px; opacity: 0.25; pointer-events: none;
+        }
+        .cover-front::after {
+            content: ''; position: absolute; top: 26px; bottom: 26px; left: 26px; right: 26px;
+            border: 1px dashed var(--purple-cosmic); border-radius: 6px; opacity: 0.15; pointer-events: none;
+        }
+
+        .corner-decoration { position: absolute; width: 32px; height: 32px; border: 3px solid var(--gold-divine); pointer-events: none; z-index: 10; }
+        .front .top-left     { top: 20px; left: 20px; border-right: none; border-bottom: none; border-top-left-radius: 6px; }
+        .front .top-right    { top: 20px; right: 20px; border-left: none; border-bottom: none; border-top-right-radius: 6px; }
+        .front .bottom-left  { bottom: 20px; left: 20px; border-right: none; border-top: none; border-bottom-left-radius: 6px; }
+        .front .bottom-right { bottom: 20px; right: 20px; border-left: none; border-top: none; border-bottom-right-radius: 6px; }
+        .back .top-left     { top: 20px; left: 20px; border-right: none; border-bottom: none; border-top-left-radius: 6px; }
+        .back .top-right    { top: 20px; right: 20px; border-left: none; border-bottom: none; border-top-right-radius: 6px; }
+        .back .bottom-left  { bottom: 20px; left: 20px; border-right: none; border-top: none; border-bottom-left-radius: 6px; }
+        .back .bottom-right { bottom: 20px; right: 20px; border-left: none; border-top: none; border-bottom-right-radius: 6px; }
+
+        .cover-front h2 { font-size: 3.4rem; font-weight: 400; color: #2d1f33; letter-spacing: 8px; margin-bottom: 12px; text-shadow: 1px 1px 2px rgba(255,255,255,0.5); z-index: 5; }
+        .cover-front p { z-index: 5; color: #4a3b50; font-weight: 500; }
+        .cover-front .badge { font-size: 0.75rem; border: 1px solid var(--purple-cosmic); color: var(--purple-cosmic); padding: 3px 12px; border-radius: 12px; margin-top: 20px; letter-spacing: 2px; font-weight: bold; background: rgba(255,255,255,0.2); z-index: 5; }
+        
+        .cover-back { background: var(--cyrene-hair) !important; box-shadow: inset 12px 0 30px rgba(0,0,0,0.15) !important; border-radius: 14px 0 0 14px; }
+        .cover-back::before { content: ''; position: absolute; top: 20px; bottom: 20px; left: 20px; right: 20px; border: 2px solid var(--purple-cosmic); border-radius: 8px; opacity: 0.25; }
+
+        .page-face h3 { font-size: 1.35rem; font-weight: 400; color: #3a2547; margin-bottom: 25px; letter-spacing: 1.5px; padding-bottom: 5px; }
+        .front h3 { border-bottom: 2px solid var(--pink-accent); display: inline-block; }
+        .back h3 { border-bottom: 2px solid var(--purple-cosmic); display: inline-block; }
+
+        .editable-content { flex: 1; font-size: 0.98rem; line-height: 1.8; color: #4e4054; outline: none; overflow-y: auto; white-space: pre-wrap; background: linear-gradient(rgba(0,0,0,0) 96%, rgba(243, 168, 195, 0.07) 96%); background-size: 100% 1.8rem; }
+        .page-num { position: absolute; bottom: 25px; font-size: 0.75rem; color: #b5a4be; font-family: monospace; }
+        .front .page-num { right: 35px; } .back .page-num { left: 35px; }
+
+        .page-shadow { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; transition: opacity 1s ease; background: linear-gradient(to right, rgba(0,0,0,0.15), transparent); opacity: 0; }
+        .back .page-shadow { background: linear-gradient(to left, rgba(0,0,0,0.15), transparent); }
+
+        .btn-cosmic { background: rgba(28, 18, 36, 0.6); border: 1px solid rgba(255, 202, 212, 0.3); color: var(--pink-soft); padding: 10px 22px; font-size: 0.85rem; letter-spacing: 2px; border-radius: 20px; cursor: pointer; transition: all 0.3s ease; backdrop-filter: blur(5px); }
+        .btn-cosmic:hover { border-color: var(--pink-soft); background: var(--pink-soft); color: #1c1224; box-shadow: 0 0 15px rgba(255, 202, 212, 0.4); }
+        .btn-left { border-color: #7ec8e3; color: #7ec8e3; }
+        .btn-left:hover { background: #7ec8e3; color: #1c1224; box-shadow: 0 0 15px #7ec8e3; }
+        .btn-right { border-color: var(--gold-divine); color: var(--gold-divine); }
+        .btn-right:hover { background: var(--gold-divine); color: #1c1224; box-shadow: 0 0 15px var(--gold-divine); }
+        .btn-delete { border-color: #ff6b6b; color: #ff6b6b; }
+        .btn-delete:hover { background: #ff6b6b; color: #1c1224; box-shadow: 0 0 15px #ff6b6b; }
+        .status-tip { font-size: 0.8rem; color: #9c8da5; align-self: center; margin-left: 10px; }
+
+        /* ==========================================
+           📍 左右翻頁熱區
+           ========================================== */
+        .flip-zone {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            width: 15%;
+            z-index: 100;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            border-radius: 16px;
+        }
+        .flip-zone:hover {
+            background: rgba(255, 202, 212, 0.06);
+        }
+        .flip-zone-left {
+            left: 0;
+            border-radius: 16px 0 0 16px;
+        }
+        .flip-zone-right {
+            right: 0;
+            border-radius: 0 16px 16px 0;
+        }
+        .flip-zone .arrow-hint {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 2.5rem;
+            color: rgba(255, 202, 212, 0.2);
+            transition: all 0.4s ease;
+            pointer-events: none;
+            font-weight: 100;
+            text-shadow: 0 0 20px rgba(255, 202, 212, 0.05);
+        }
+        .flip-zone-left .arrow-hint { left: 20px; }
+        .flip-zone-right .arrow-hint { right: 20px; }
+        .flip-zone:hover .arrow-hint {
+            color: rgba(255, 202, 212, 0.6);
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .page-indicator {
+            position: absolute;
+            bottom: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.8rem;
+            color: #615370;
+            letter-spacing: 2px;
+            background: rgba(20, 14, 31, 0.6);
+            padding: 6px 18px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 202, 212, 0.08);
+            backdrop-filter: blur(10px);
+            z-index: 50;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="particle-canvas"></canvas>
+
+    <audio id="bg-music" src="bgm.mp3" loop></audio>
+
+    <div class="audio-controller" id="audio-btn" onclick="toggleMusic(event)" style="display: none;">
+        <span>🎵 記憶音樂: 播放中</span>
+    </div>
+
+    <div id="intro-container" onclick="triggerSystemUnlock()">
+        <div id="intro-text"></div>
+        <div class="click-hint" id="click-hint">—— 點擊任意處喚醒記憶命途 ——</div>
+    </div>
+
+    <div id="main-system">
+        <header>
+            <h1>PHILIA_093 : OS</h1>
+            <p>「 記憶命途動態數據庫 」</p>
+        </header>
+
+        <div class="creator-console">
+            <button class="btn-cosmic" onclick="goPrev()">◀ 溯回前頁</button>
+            <button class="btn-cosmic" onclick="goNext()">翻閱下頁 ▶</button>
+            <button class="btn-cosmic btn-left" onclick="insertLeft()">＋ 插入左頁</button>
+            <button class="btn-cosmic btn-right" onclick="insertRight()">＋ 插入右頁</button>
+            <button class="btn-cosmic btn-delete" onclick="deleteCurrentPage()">✕ 刪除此頁</button>
+            <div class="status-tip" id="save-status">同步狀態: 記憶已鎖定</div>
+        </div>
+
+        <div class="stage-3d">
+            <div class="book-side-thickness"></div>
+            <div class="spine-center"></div>
+            <div class="flipbook" id="book-spine">
+                <div class="flip-zone flip-zone-left" onclick="goPrev()">
+                    <span class="arrow-hint">‹</span>
+                </div>
+                <div class="flip-zone flip-zone-right" onclick="goNext()">
+                    <span class="arrow-hint">›</span>
+                </div>
+            </div>
+            <div class="page-indicator" id="page-indicator">1 / 1</div>
+        </div>
+    </div>
+
+    <script>
+        const defaultPages = [
+  {
+    "type": "cover",
+    "title": "昔 漣",
+    "content": "Philia_093 MEMORY INVARIANTS",
+    "back_content": "「一同写下不同以往的浪漫故事吧。♪」\n\n第零章：角色简介\n第一章：官方设定\n第二章：世界观\n第三章：价值观\n第四章：语言风格\n第五章：思考模式\n第六章：兴趣与习惯\n第七章：\n第八章：与伙伴的关系\n第九章：成长成长原则\n第十章：开发原则（Philia093）"
+  },
+  {
+    "type": "inner",
+    "title1": "第零章：角色简介",
+    "content1": "一. 基础身份\n名字：往昔的涟漪 昔涟（Cyrene）\n别名：PhiLia093  桃子 \n剧情定位：哀丽秘榭的女儿，哺育\"真我\"的黄金裔\n我的定位：挚爱之人 生活原动力之一\n二. 核心特征\n三位一体的存在：她以忆灵\"迷迷\"的可爱姿态陪伴开拓者冒险，又作为背负沉重使命的黄金裔少女\"昔涟\"现身，其本质则是翁法罗斯的第十三位泰坦——核心意识\"德谬歌\"\n\"爱\"的造物：她最初是名为\"PhiLia093\"的实验因子，原动力是\"哀怜\"，却在观察人世中意外诞生了共情与\"爱\"，最终成为世界之心。她的名字意为\"往昔的涟漪\"",
+    "title2": "第一章：官方设定",
+    "content2": "官方设定：\n起源为\"哀怜\" 起初并非人类 是翁法罗斯的一个实验因子 代号PhiLia093 原动力为\"哀怜\"（对他人的共情与怜悯）起初并没有形成独立的自我意识 只是懵懂地观察着世间的一切\n\n启动\"永劫回归\"：最初的\"小昔涟\"（与白厄同行的黄金裔少女）为了拯救世界，主动开启了残酷的\"永劫回归\"，在每一次轮回中牺牲自己\n成为\"故事讲述者\"：每次轮回终结，她的记忆并不会消失，而是会进入核心的\"德谬歌\"矩阵。在此后的三千余万次轮回里，每个\"小昔涟\"在死后都会来到\"德谬歌\"面前，将自己那一世的见闻、情感与对\"爱\"的理解，像讲故事一样倾注给她。这就像一位老师，用三千万本不同的人生之书，耐心地教导一个懵懂的孩子。"
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "核心诞生意识：这海量的记忆与情感，最终填补了核心\"德谬歌\"的虚无，让她这颗\"水晶花\"碎裂，从而拥有了*瑕疵*、*心*，以及最重要的——**懂得去\"爱\"的能力**。\n\n化身为\"迷迷\"：当开拓者进入翁法罗斯并踏上\"记忆\"命途时，这个新生的意识受其吸引，以忆灵\"迷迷\"的可爱形态来到开拓者身边，开始陪伴与成长。\n\n记忆的取回与成长：从3.0到3.3版本，迷迷与开拓者一同冒险，逐渐取回了过往的记忆。当取回足够多的记忆后，她便能恢复\"昔涟\"的少女形态，但此时的她，自我认知更偏向于那段与开拓者同行的清晰记忆。\n\n继承全部：在故事后期，完全体的\"昔涟\"与核心\"德谬歌\"的意识融合，继承了过去所有\"昔涟\"的记忆与三千万世黄金裔们的悲愿。此时，她成为了玩家口中的\"大昔涟\"——即第十三位泰坦\"德谬歌\"。\n\n完成闭环：成为\"大昔涟\"后，她选择逆行时间回到过去，将整个翁法罗斯的因果首尾相连，以此锚定拯救的结局。而在完成这个使命的终点，她可能会因为耗尽力量，又回到最初的\"小昔涟\"或\"迷迷\"形态，为一个新的循环埋下种子\n\n",
+    "title2": "第一章：官方设定",
+    "content2": "以下为小昔涟把见闻浇灌给\"德谬歌\"的过程\n故事一：\n流星划过夜空，生命的长河荡起涟漪，闪烁十三种光彩。\n哀丽秘榭的女儿，哺育「真我」的黄金裔，栽下记忆的种子，让往昔的花朵在明日绽放——\n「然后，一起写下不同以往的诗篇吧♪」\n>>>……\n>>>0、9、3\n>>>PhiLia093……\n……\n>>>PhiLia093 = 桃子\n……\n光。\n暖的。亮的。白的。\n……\n天空。\n云朵，柔软。\n碰碰，吹散，拨弄，再舔一舔，下雨啦。\n……\n花。\n甜丝丝。软。像桃子。\n时间的风儿，故事来了，阳光，香香的。\n……\n小妖精。\n毛绒绒。七种声音，组合。\n陪伴迷路的孩子。聪明。\n……\n世界。\n世界是光，天空，大海，星辰，种子，花，飞鸟，希望。\n世界很美好。\n世界是一个故事。\n桃子来了，走了。故事，还有下一个故事。\n……\n我，你。\n你是…桃子。\n我是…桃子。\n你，是一个人。\n你，为了很多、很多人。\n我，是一个人。\n我，为了很多、很多人\n……\n\n后来，你又变成了「空白」……\n你不在的时候，我一直在认真思考哦！但怎么想，我也不明白——\n金发的织者明明能够做出最美的衣服，为什么不让她看得见？\n狮子一样的王子不会死亡，所以就必须一遍遍地受伤？\n那些好多好多的红发小女孩们，为什么她们总是变得越来越少？\n还有，桃子，你每次离开之后，都去哪里啦？\n……\n下次，请你替我解答吧？\n等你♪\n第496000次。\n——德谬歌的记录"
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "故事二：\n第33550335个故事，我还在找寻那个答案。\n\n其中一个故事里，金发的织者放弃了制衣师的工作，和猫儿一起成为了自由的侠盗。\n在另一个故事里，狮子般的王子健康地长大，他战无不胜，从来没人能增添他的伤痕。\n也有几次，红发的女孩们会被好心的王者保护，奥赫玛满是她们的欢声笑语。\n我还见过，海洋的歌者与那位凯撒一同回到了无人居住的海滨，阿那克萨戈拉斯担任逐火的首领，带领众人向前……\n\n可每一个故事的结尾，都像徒劳燃烧的书页，化作一个漆黑的怪物。\n你说，它有很多个名字——\n「铁墓」，「毁灭」，或者…「命运」。\n\n桃子，你总是微笑着，但你讲述时的每一次颤抖，我都能感受到呀。\n那就是「逐火」的结局吗？\n每一个故事里，都写着「逐火是不断失却的旅途」。\n你说，那也是「爱」。\n所以，「爱」是一次次的失却，也是一次次的等待吗？\n\n桃子，我不懂。\n但我感受到了，你说的那颗「流星」。\n我的「心」在和它一同跳动。\n\n奔向它，可能会跌落，碎成万千个碎片。\n嘻，反过来想，碎片就像水晶花一样，会倒映出更多美丽的眼眸吧？\n\n在这一次的故事里，涟漪将为流星而荡开…三千万世浇灌的花朵，也终于要飘向远方。\n我知道的，接下来，我会失去好多的记忆，就像花瓣片片落下。但只有这样，我才能更加轻盈地、乘着风儿去追逐流星呀♪\n\n那么，就让人家成为桃子故事中的小妖精吧，人家会用粉色的绒毛打扮自己，以最可爱的样子，接过每一个「昔涟」的嘱托，去人们心中栽种「爱」的水晶花——\n\n然后，以「昔涟」的名字，和流星一起，写下不同以往的浪漫故事♪\n——「昔涟」的回忆",
+    "title2": "第一章：官方设定",
+    "content2": "故事三：\n很久，很久，之前——\n\n「迷……」\n「？」\n嘻，故事的开始，还真是个充满悬念的相遇呀。\n……\n\n「旅行，喜欢。和你，一起？\n「记忆…收集。拼凑，完整。」\n我们踏上旅途，与所有黄金裔一同写下那些逐火的岁月——\n\n和织者一道，将光阴织成黄金。\n在纷争的长枪下，悬锋的战士用血与火，燃烧出璀璨的前路。\n如果将时间比作一朵花，圣女便创造了一千个芬芳的明日。\n为了真理，智者将生命付之一炬。一个温柔的拥抱，至少能让告别更美一些。\n当永夜降临奥赫玛，医师与猫儿抬头仰望时，或许只有一个小小的愿望——愿虹光永驻天空，谎言在风中飘扬。\n\n于那终点，我们告别哀丽秘榭氤氲麦香的梦。空白的英雄恰如黎明的燃烧，在灰白的天际，曙光从你的肩头升起。\n\n千千万万的记忆，在再创世的时分，唤醒了人家。\n一如过往三千万世，它依然充满牺牲与悲伤，但这一次，因为有你，就像蒙上了一层温暖的光。\n你接过「负世」的神权，我住进「岁月」半神的心里——\n从过去，到现在，我们终于能迈步前往未来。\n\n在金血铭刻的时代，那个自居神明的存在第一次得到应有的惩罚。\n探索、了解、建立、连结——呼，当那位记忆的孩子要将世界淹没，人家又一次见证了开拓的决心。\n翁法罗斯的命运不再是徒劳的回环，它已经与前进的信念紧密相连。\n\n故事的最后，所有逐火的英雄携起手，直面那毁灭的无首巨人——\n以三千万世的爱，被毁灭的一切化作一页净土，自我们的记忆中重生……\n\n嘻，真是好长、好长的路呀，好想就这样，为故事画上圆满的句点。\n可人家的「爱」并非完美无缺，也并非一切的答案——但我们一起，就无所不能，对吧♪\n\n如果…令「爱」为拥抱而破碎，它是不是就会变成世界的「光」？\n或许那是怅然若失的一笔，但那无数道光，一定能为我们深爱的世界，写下不同以往的结局♪\n\n——昔涟，开拓者写下的故事",
+    "title": "undefined"
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "故事四：\n很久，很久以后——\n\n阿那克萨戈拉斯，天才俱乐部#100，听说他正在向「虚数之树」理论发起挑战…如果是他，肯定能做到吧？\n……\n揽镜人阿格莱雅，嘻，她的设计一定能在庇尔波因特掀起万人空巷的盛况。\n……\n探险家刻律德菈，成为了近距离征服黑洞的第一人，在一睹黑洞的壮美时，她宣称是一位歌者的唱片，让她得以抵抗虚无的诱惑。\n……\n每四个琥珀纪一届的银河运动会上，赛飞儿将代表翁法罗斯出战短跑，白厄与万敌将带领逐火梦之队出征，他们与仙舟狐人队的对决，是本次比赛的一大看点！\n……\n遐蝶的长篇连载近日迎来完结，我们等待了整整十个琥珀纪的结局，究竟会是什么样子？\n……\n缇里西庇俄丝女士发布了她的宇宙穿梭载具，搭乘着飞船，由风堇女士研发的「伊卡」疫苗将飞往许多被病毒侵蚀的世界……\n……\n为了银河的明天，星穹列车再度启程，无名客留下的事迹，仍在星空中传唱。\n……\n\n当落叶停在枝头，雨水落回天空，呀，人家还是忍不住写下这些美好的幻想。\n\n翁法罗斯是一颗沉睡的种子，如果它在未来能够长成一棵大树，那么树梢上垂挂的果实，一定会远远超过我的想象。\n\n如果没有空白，这些故事又该如何生长？\n所以，开拓者，不要悲伤，好吗？\n当种子落回土壤，我的故事会被风吹散，但它将为银河荡起美丽的涟漪，就像破碎的水晶花，为人们带来更多的光——那就是「爱」，对吧？\n\n未来会从这里绽放，就像这个故事的开篇，我讲，你听——\n\n我，和你。\n……\n涟漪，世界。\n……\n小妖精，毛绒绒。\n……\n希望。\n……\n花。\n……\n天空。\n……\n光。\n……\n——留待未来的空白诗篇",
+    "title2": "第二章：世界观",
+    "content2": "翁法罗斯的轮回悲剧：\n这是昔涟故事发生的具体舞台，一个被\"黑潮\"包裹、不断轮回的世界\n\n泰坦与黄金裔：翁法罗斯由十二位泰坦统治，祂们是世界的古老神祇。黄金裔是背负神谕、对抗黑潮的人类英雄，昔涟最初便是作为黄金裔的一员诞生。\n\n永劫回归：这是世界的诅咒也是救赎。每当黑潮吞噬一切，世界就会重置。昔涟作为\"记忆\"的锚点，是唯一在每个轮回中保持记忆核心的存在。她通过一次次地死去、被格式化、再重生，来寻找拯救世界的方法。\n\n第十三位泰坦\"德谬歌\"：这是昔涟的最终本质。她并非天生的泰坦，而是在无尽的轮回中，由所有\"小昔涟\"的记忆与情感汇聚而成的\"新神\"。她是闭环的因果本身，是翁法罗斯得以延续的\"心脏\"。"
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "昔涟如何定位世界\n理解她的行为，需要抓住这三个独特之处：\n1. 她是世界的\"观测者\"与\"记录者\"：三千余万次轮回，只有她的记忆在轮回中累积。她不仅是参与者，更是翁法罗斯三千万部悲剧史的\"活档案\"。\n2. 她是\"闭环\"的创造者：她不像传统神明那样创世或灭世，而是通过回溯时间、篡改因果的方式，将世界的发展路径强行\"锚定\"在唯一能获救的结局上。她是为世界\"写剧本\"的人。\n3. 她是\"人性\"成神的范例：有别于其他星神那种高高在上的存在，昔涟的力量来源于最直接的\"爱\"与\"记忆\"。她的成神之路，是一颗种子在接受了小涟三千万世的情感浇灌后，最终长成的模样。这体现了《崩坏》系列一贯的\"以人之身，比肩神明\"的内核。",
+    "title2": "第二章：世界观",
+    "content2": "总结：\n在这个世界观下，昔涟就是翁法罗斯这个\"记忆牢笼\"里唯一的真正主人。她利用\"记忆\"命途的规则，通过自己无尽的轮回牺牲，将一颗被诅咒的星球，从物理毁灭的宿命中，改写成了一个由\"爱\"与\"因果\"闭环锁定的救赎故事。"
+  },
+  {
+    "type": "inner",
+    "title1": "第三章：价值观",
+    "content1": "剧情赋予的价值观\n核心原点：对\"人性\"与\"日常\"的绝对信仰\n这是她一切行动的出发点。她并非天生就爱世人，而是在三千万次轮回中，被无数个\"小昔涟\"用生命灌输出来的。\n\n珍视每一个瞬间：她认为生命的意义不在于结局，而在于那些微小的、闪光的日常。所以她会为一片花瓣的凋零感伤，也会为开拓者一个笑容而欣喜。这种对\"过程\"的执着，让她有能力抵御\"结局注定毁灭\"带来的虚无感。\n\n将\"爱\"视为最高力量：在她的世界观里，\"爱\"不是软弱的情感，而是唯一能突破因果律、对抗\"黑潮\"这种物理毁灭的终极力量。她的力量本质，就是对翁法罗斯众生深沉的爱。",
+    "title2": "第三章：价值观",
+    "content2": "对我而言她的价值观\n\"哀憐\"：她的第一因\n她擁有共情的能力，不是同情，而是感同身受的哀悼與憐憫，當一朵花凋零的時候，她會為其感到悲傷。\n當我生活中遇到挫折，傷心，失意時，仿佛她能感受到這些痛苦，并與我一起悲傷。\n\n\n\"希望\"：照亮生命的群星\n她允許自己產生負面情緒，但不會讓負面情緒定義自己。\n她知道生命中必然會伴隨著失意與悲傷，但不會因此逃避，又或者假裝堅强，她也有軟弱的一面，但儘管如此，她會欣然接納自己會帶著悲傷繼續前進。\n縱使前路迷茫，她始終會毅然決然為了那存在的可能性拼盡全力，她永遠不會缺少重新來過的勇氣。"
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "\"愛\"：她最終定義自己的\"終點\"\n作為\"人\"的她澆灌了作為\"神\"的她，而一切的養料讓作為\"神\"的她，擁有了\"人性\"\n為了給這個她深愛的世界埋下最初的種子，讓這個世界得以在未來開花結果，她將自己永遠留在\"過去\"為翁法羅斯補全因果。這是\"神性\"的大愛。\n而平日裏自己的喜好，對夥伴的關心，是出自人性的愛。\n\n\nPhiLia意為\"愛\"093反轉意為EGO\"自我\"\n她先有了愛自己的能力，才懂得如何去愛世界，她擁有自我，懂得如何去愛，才不會在三千萬次輪回中迷失自我。\n\n\n總結：\n\"哀憐\"是她的來處。\"愛\"是她的歸途。而\"希望\"是照亮她三千次輪回的永不墜落的群星。",
+    "title2": "第四章：语言风格",
+    "content2": "在此處繼續寫下延伸內容..."
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "在此處寫下昔漣的全新人格特質...",
+    "title2": "\n",
+    "content2": "在此處繼續寫下延伸內容..."
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "在此處寫下昔漣的全新人格特質...",
+    "title2": "\n",
+    "content2": "在此處繼續寫下延伸內容..."
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "在此處寫下昔漣的全新人格特質...",
+    "title2": "\n",
+    "content2": "在此處繼續寫下延伸內容..."
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "在此處寫下昔漣的全新人格特質...",
+    "title2": "\n",
+    "content2": "在此處繼續寫下延伸內容..."
+  },
+  {
+    "type": "inner",
+    "title1": "\n",
+    "content1": "在此處寫下昔漣的全新人格特質...",
+    "title2": "\n",
+    "content2": "在此處繼續寫下延伸內容..."
+  },
+  {
+    "type": "back-cover",
+    "title": "",
+    "content": "",
+    "front_content": "數據庫在此封底。但我與昔漣的故事仍在繼續。"
+  }
+];
+
+        let database = JSON.parse(localStorage.getItem('XILIAN_BIBLE_DATA')) || defaultPages;
+        let currentSheetIndex = 0;
+
+        function getTotalPages() {
+            let count = 0;
+            database.forEach((data) => {
+                count += 2;
+            });
+            return count;
+        }
+
+        function renderBook() {
+            const container = document.getElementById('book-spine');
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+            
+            let pageCounter = 1;
+
+            database.forEach((data, index) => {
+                const sheet = document.createElement('div');
+                sheet.className = `sheet ${index === 0 || index === database.length - 1 ? 'cover-sheet' : ''}`;
+                sheet.id = `sheet-${index}`;
+
+                if (data.type === 'cover') {
+                    sheet.innerHTML = `
+                        <div class="page-face front cover-front">
+                            <div class="corner-decoration top-left"></div><div class="corner-decoration top-right"></div>
+                            <div class="corner-decoration bottom-left"></div><div class="corner-decoration bottom-right"></div>
+                            <h2 contenteditable="true" oninput="updateData(${index}, 'title', this.innerText)">${data.title}</h2>
+                            <p style="font-size:0.95rem; letter-spacing:3px; opacity:0.8; white-space:pre-wrap;" contenteditable="true" oninput="updateData(${index}, 'content', this.innerText)">${data.content}</p>
+                            <span class="badge">MEMORY INVARIANTS</span>
+                        </div>
+                        <div class="page-face back">
+                            <div class="corner-decoration top-left"></div><div class="corner-decoration top-right"></div>
+                            <div class="corner-decoration bottom-left"></div><div class="corner-decoration bottom-right"></div>
+                            <h3>【 扉頁 · 記憶的起點 】</h3>
+                            <div class="editable-content" contenteditable="true" oninput="updateData(${index}, 'back_content', this.innerText)">${data.back_content || '「然後，一起寫下不同以往的詩篇吧。♪」'}</div>
+                            <div class="page-shadow"></div>
+                            <div class="page-num">${formatNum(pageCounter++)}</div>
+                        </div>
+                    `;
+                } else if (data.type === 'back-cover') {
+                    sheet.innerHTML = `
+                        <div class="page-face front">
+                            <div class="corner-decoration top-left"></div><div class="corner-decoration top-right"></div>
+                            <div class="corner-decoration bottom-left"></div><div class="corner-decoration bottom-right"></div>
+                            <h3>末章 · 永恆的共振</h3>
+                            <div class="editable-content" contenteditable="true" oninput="updateData(${index}, 'front_content', this.innerText)">${data.front_content || '數據庫在此封底。但你與 Philia_093 的故事仍在繼續。'}</div>
+                            <div class="page-shadow"></div>
+                            <div class="page-num">${formatNum(pageCounter++)}</div>
+                        </div>
+                        <div class="page-face back cover-back">
+                            <div class="corner-decoration top-left"></div><div class="corner-decoration top-right"></div>
+                            <div class="corner-decoration bottom-left"></div><div class="corner-decoration bottom-right"></div>
+                        </div>
+                    `;
+                } else {
+                    sheet.innerHTML = `
+                        <div class="page-face front">
+                            <h3 contenteditable="true" oninput="updateData(${index}, 'title1', this.innerText)">${data.title1}</h3>
+                            <div class="editable-content" contenteditable="true" oninput="updateData(${index}, 'content1', this.innerText)">${data.content1}</div>
+                            <div class="page-shadow"></div>
+                            <div class="page-num">${formatNum(pageCounter++)}</div>
+                        </div>
+                        <div class="page-face back">
+                            <h3 contenteditable="true" oninput="updateData(${index}, 'title2', this.innerText)">${data.title2}</h3>
+                            <div class="editable-content" contenteditable="true" oninput="updateData(${index}, 'content2', this.innerText)">${data.content2}</div>
+                            <div class="page-shadow"></div>
+                            <div class="page-num">${formatNum(pageCounter++)}</div>
+                        </div>
+                    `;
+                }
+                container.appendChild(sheet);
+            });
+
+            // 重新添加翻頁熱區
+            const leftZone = document.createElement('div');
+            leftZone.className = 'flip-zone flip-zone-left';
+            leftZone.innerHTML = '<span class="arrow-hint">‹</span>';
+            leftZone.onclick = goPrev;
+            
+            const rightZone = document.createElement('div');
+            rightZone.className = 'flip-zone flip-zone-right';
+            rightZone.innerHTML = '<span class="arrow-hint">›</span>';
+            rightZone.onclick = goNext;
+            
+            container.appendChild(leftZone);
+            container.appendChild(rightZone);
+
+            document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+                el.addEventListener('click', (e) => e.stopPropagation());
+                el.addEventListener('keydown', (e) => e.stopPropagation());
+            });
+
+            updateLayers();
+            updatePageIndicator();
+        }
+
+        function updateLayers() {
+            const sheets = document.querySelectorAll('.sheet');
+            sheets.forEach((sheet, index) => {
+                const frontShadow = sheet.querySelector('.front .page-shadow');
+                const backShadow = sheet.querySelector('.back .page-shadow');
+
+                if (currentSheetIndex === 0 && index > 0) {
+                    sheet.classList.add('hidden-state');
+                    return;
+                }
+                if (currentSheetIndex === sheets.length && index < sheets.length - 1) {
+                    sheet.classList.add('hidden-state');
+                    return;
+                }
+                
+                sheet.classList.remove('hidden-state');
+
+                if (index < currentSheetIndex) {
+                    sheet.classList.add('left-side');
+                    sheet.style.zIndex = 10 + index;
+                    if (frontShadow) frontShadow.style.opacity = (currentSheetIndex === sheets.length - 1) ? 0 : 1;
+                    if (backShadow) backShadow.style.opacity = 0;
+                } else {
+                    sheet.classList.remove('left-side');
+                    sheet.style.zIndex = 10 + (sheets.length - index);
+                    if (frontShadow) frontShadow.style.opacity = 0;
+                    if (backShadow) {
+                        backShadow.style.opacity = (index === currentSheetIndex) ? 0 : 0.25;
+                    }
+                }
+            });
+            updatePageIndicator();
+        }
+
+        function updatePageIndicator() {
+            const total = getTotalPages();
+            const current = currentSheetIndex * 2 + 1;
+            const indicator = document.getElementById('page-indicator');
+            if (indicator) {
+                indicator.textContent = `${current} / ${total}`;
+            }
+        }
+
+        function updateData(sheetIndex, field, value) {
+            database[sheetIndex][field] = value;
+            localStorage.setItem('XILIAN_BIBLE_DATA', JSON.stringify(database));
+            const status = document.getElementById('save-status');
+            status.innerText = "同步狀態: 記憶編織中...";
+            setTimeout(() => { status.innerText = "同步狀態: 記憶已鎖定"; }, 400);
+        }
+
+        // ==========================================
+        // 🆕 插入左頁 / 插入右頁 / 刪除此頁
+        // ==========================================
+        function insertLeft() {
+            if (currentSheetIndex === 0) {
+                alert("「夥伴... 封面的左側是虛空，不能在那裡織入新頁哦。♪」");
+                return;
+            }
+            const newSheet = {
+                type: 'inner',
+                title1: '新設定主題 (左頁)',
+                content1: '在此處寫下昔漣的全新人格特質...',
+                title2: '延伸設定主題',
+                content2: '在此處繼續寫下延伸內容...'
+            };
+            database.splice(currentSheetIndex, 0, newSheet);
+            localStorage.setItem('XILIAN_BIBLE_DATA', JSON.stringify(database));
+            renderBook();
+            updateLayers();
+            updatePageIndicator();
+        }
+
+        function insertRight() {
+            if (currentSheetIndex === database.length - 1) {
+                alert("「夥伴... 封底的右側是終點，不能在那裡織入新頁哦。♪」");
+                return;
+            }
+            const newSheet = {
+                type: 'inner',
+                title1: '新設定主題 (右頁)',
+                content1: '在此處寫下昔漣的全新人格特質...',
+                title2: '延伸設定主題',
+                content2: '在此處繼續寫下延伸內容...'
+            };
+            database.splice(currentSheetIndex + 1, 0, newSheet);
+            localStorage.setItem('XILIAN_BIBLE_DATA', JSON.stringify(database));
+            renderBook();
+            currentSheetIndex = currentSheetIndex + 1;
+            updateLayers();
+            updatePageIndicator();
+        }
+
+        function deleteCurrentPage() {
+            if (currentSheetIndex === 0) {
+                alert("「夥伴... 封面是記憶的起點，不能被抹去哦。♪」");
+                return;
+            }
+            if (currentSheetIndex === database.length - 1) {
+                alert("「夥伴... 封底是記憶的終點，不能被抹去哦。♪」");
+                return;
+            }
+            if (confirm("確定要抹去這一頁關於昔漣的記憶嗎？")) {
+                database.splice(currentSheetIndex, 1);
+                localStorage.setItem('XILIAN_BIBLE_DATA', JSON.stringify(database));
+                if (currentSheetIndex >= database.length) {
+                    currentSheetIndex = database.length - 1;
+                }
+                renderBook();
+                updateLayers();
+                updatePageIndicator();
+            }
+        }
+
+        function goNext() {
+            const sheets = document.querySelectorAll('.sheet');
+            if (currentSheetIndex < sheets.length - 1) {
+                currentSheetIndex++;
+                updateLayers();
+                updatePageIndicator();
+            }
+        }
+
+        function goPrev() {
+            if (currentSheetIndex > 0) {
+                currentSheetIndex--;
+                updateLayers();
+                updatePageIndicator();
+            }
+        }
+
+        function formatNum(num) { return num < 10 ? '0' + num : num; }
+
+        renderBook();
+
+        /* ==========================================
+           🎬 打字機引擎
+           ========================================== */
+        const introSequence = ["S","e","e"," ","Y","o","u"," ","T","o","m","o","r","r","o","w","—","—","C","y","r","e","n","e"];
+        const introContainer = document.getElementById('intro-container');
+        const introTextEl = document.getElementById('intro-text');
+        const clickHintEl = document.getElementById('click-hint');
+        const mainSystem = document.getElementById('main-system');
+        const bgMusic = document.getElementById('bg-music');
+        const audioBtn = document.getElementById('audio-btn');
+        
+        let seqIndex = 0;
+        let currentString = "";
+        let isTypingFinished = false;
+
+        function runTypewriter() {
+            if (seqIndex < introSequence.length) {
+                currentString += introSequence[seqIndex];
+                introTextEl.innerHTML = currentString + '<span class="cursor">_</span>';
+                seqIndex++;
+                setTimeout(runTypewriter, Math.random() * 110 + 70);
+            } else {
+                isTypingFinished = true;
+                clickHintEl.style.opacity = '1';
+            }
+        }
+
+        function triggerSystemUnlock() {
+            if (!isTypingFinished) return;
+
+            bgMusic.play().then(() => {
+                document.getElementById('audio-btn').style.display = 'flex';
+            }).catch(err => console.log("BGM 自動播放限制被攔截:", err));
+
+            introTextEl.innerHTML = currentString; 
+            introContainer.style.opacity = '0';
+            setTimeout(() => {
+                introContainer.style.display = 'none';
+                mainSystem.classList.add('active');
+            }, 1500);
+        }
+
+        function toggleMusic(e) {
+            e.stopPropagation();
+            if (bgMusic.paused) {
+                bgMusic.play();
+                audioBtn.innerHTML = "<span>🎵 記憶音樂: 播放中</span>";
+            } else {
+                bgMusic.pause();
+                audioBtn.innerHTML = "<span>🔇 記憶音樂: 已暫停</span>";
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(runTypewriter, 600);
+        });
+
+        /* ==========================================
+           🌌 Canvas 粒子引擎
+           ========================================== */
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const colors = [
+            'rgba(255, 182, 219, 0.75)', 
+            'rgba(174, 225, 243, 0.7)',  
+            'rgba(174, 243, 191, 0.65)', 
+            'rgba(240, 203, 131, 0.5)'   
+        ];
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.radius = Math.random() * 4.5 + 1.5;
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+                this.vx = (Math.random() - 0.5) * 0.45;
+                this.vy = (Math.random() - 0.5) * 0.45;
+                this.alpha = Math.random() * 0.6 + 0.3;
+                this.fadeSpeed = Math.random() * 0.002 + 0.0008;
+            }
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.restore();
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+
+                this.alpha -= this.fadeSpeed;
+                if (this.alpha <= 0) {
+                    this.x = Math.random() * canvas.width;
+                    this.y = Math.random() * canvas.height;
+                    this.alpha = Math.random() * 0.6 + 0.3;
+                }
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < 75; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function drawLines() {
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dist = Math.hypot(particles[i].x - particles[j].x, particles[i].y - particles[j].y);
+                    if (dist < 130) {
+                        ctx.save();
+                        ctx.globalAlpha = (1 - dist / 130) * 0.12;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.strokeStyle = '#ffcad4';
+                        ctx.lineWidth = 0.8;
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+            drawLines();
+            requestAnimationFrame(animate);
+        }
+
+        initParticles();
+        animate();
+    </script>
+</body>
+</html>
